@@ -1,1 +1,13 @@
 Inital version of BRAINS AutoWorkup built on Nipype.  Currently very rough, use at your own risk!
+
+To use the code, build Slicer4 with BRAINSTools and ITKv4 on.
+
+Then install the nipype version in the BRAINSia github account.
+
+Add the SEM plugin directory (something like /Slicer-superbuild/Slicer-build/plugins) to your path.
+
+Run generate_brains_classes.py giving it the SEM plugin directory and the path/file to the slicer executable.
+
+Add whatever directory you ran generate_brains_classes.py from to your python path.
+
+You should now be able to run baw200.py.
