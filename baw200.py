@@ -144,8 +144,8 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, Inte
 
   #T1Basename = ConstellationBasename(T1NiftiImageList[0])
   #T2Basename = ConstellationBasename(T2NiftiImageList[0])
-  T1Basename = GetExtensionlessBasename(T1NiftiImageList[0])
-  T2Basename = GetExtensionlessBasename(T2NiftiImageList[0])
+  T1Basename = GetExtensionlessBaseName(T1NiftiImageList[0])
+  T2Basename = GetExtensionlessBaseName(T2NiftiImageList[0])
 
   ########################################################
   # Run ACPC Detect on first T1 Image - Base Image
@@ -225,7 +225,7 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, Inte
   all_t1_t2s = list(T1_file_names)
   all_t1_t2s.extend(T2_file_names)
   for i in all_t1_t2s:
-      out_vols.append("%s_corrected.%s" %
+      out_vols.append("%s_corrected%s" %
                       (GetExtensionlessBaseName(i),".nii.gz"))
   BABC.inputs.outputVolumes = out_vols
   BABC.inputs.inputVolumeTypes = input_types
@@ -248,9 +248,9 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, Inte
   """
   bfc_files = pe.Node(Function(input_names=['in_files'],    
                              output_names=['t1_corrected','t2_corrected'], 
+                             T1_count=len(T1_file_names),
                              function=get_first_T1_and_T2), 
                     name='bfc_files')
-  bfc_files.inputs.T1_count = len(T1_file_names)
   
   baw200.connect(BABC,'outputVolumes',bfc_files,'in_files')
   
@@ -326,7 +326,7 @@ def main(argv=None):
         print "ERROR:  Length of T2 image list is 0,  at least one T2 image must be specified."
         sys.exit(-1)
 
-    WorkupT1T2(OUTDIR,input_arguments.t1.split(','),input_arguments.t2.split(','),atlas_fname_wpath)
+    WorkupT1T2(OUTDIR,input_arguments.t1.split(','),input_arguments.t2.split(','),input_arguments.atlas_fname_wpath)
 
 if __name__ == "__main__":
     sys.exit(main())
