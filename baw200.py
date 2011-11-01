@@ -246,12 +246,13 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, Inte
   """
   Get the first T1 and T2 corrected images from BABC
   """
-  bfc_files = pe.Node(Function(input_names=['in_files'],    
+  bfc_files = pe.Node(Function(input_names=['in_files','T1_count'],    
                              output_names=['t1_corrected','t2_corrected'], 
-                             T1_count=len(T1_file_names),
                              function=get_first_T1_and_T2), 
                     name='bfc_files')
   
+  bfc_files.inputs.T1_count = len(T1_file_names)
+
   baw200.connect(BABC,'outputVolumes',bfc_files,'in_files')
   
   """
