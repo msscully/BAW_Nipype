@@ -105,7 +105,8 @@ def MakeAtlasNode(atlasDirectory):
     BAtlas.inputs.template_args = dict(zip(atlas_file_keys,atlas_template_args_match))
     return BAtlas
  
-def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, InterpolationMode="Linear", Mode=10,DwiList=[]):
+def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
+               Version=110, InterpolationMode="Linear", Mode=10,DwiList=[]):
   """ 
   Run autoworkup on a single subjects data.
 
@@ -142,8 +143,6 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, Inte
   T1NiftiImageList = T1Images
   T2NiftiImageList = T2Images
 
-  #T1Basename = ConstellationBasename(T1NiftiImageList[0])
-  #T2Basename = ConstellationBasename(T2NiftiImageList[0])
   T1Basename = GetExtensionlessBaseName(T1NiftiImageList[0])
   T2Basename = GetExtensionlessBaseName(T2NiftiImageList[0])
 
@@ -162,16 +161,22 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, Inte
   SRC_T1_T2.inputs.template_args =  dict(T1_0_file=[[]], T2_0_file=[[]]) #No template args to substitute
 
   ''' Assumes all T1 and T2 inputs are in the same directory. '''
-  ALL_SRC_T1_T2 = pe.Node(interface=nio.DataGrabber( outfields=['T2_files','T1_files']) , name='T1T2_Raw_Inputs')
-  ALL_SRC_T1_T2.inputs.base_directory = os.path.dirname(T1NiftiImageList[0])
-  ALL_SRC_T1_T2.inputs.template = '%s'
-  # These go from 1 to the end to exclude the first T1 and T2 which are being
-  # processed by BABC so we don't need to register them to themselves later.
   T1_file_names = [os.path.basename(f_name) for f_name in T1NiftiImageList]
   T2_file_names = [os.path.basename(f_name) for f_name in T2NiftiImageList]
+  out_fields = []
+  template_args = dict()
+  for i,fname in enumerate(T1_file_names):
+      out_fields.append("T1_%s"%(i+1))
+      template_args["T1_%s"%(i+1)] = [[fname]]
+  for i,fname in enumerate(T2_file_names):
+      out_fields.append("T2_%s"%(i+1))
+      template_args["T2_%s"%(i+1)] = [[fname]]
+
+  ALL_SRC_T1_T2 = pe.Node(interface=nio.DataGrabber( outfields=out_fields) , name='T1T2_Raw_Inputs')
+  ALL_SRC_T1_T2.inputs.base_directory = os.path.dirname(T1NiftiImageList[0])
+  ALL_SRC_T1_T2.inputs.template = '%s'
   # This will match the input file names under the first file names directory.
-  ALL_SRC_T1_T2.inputs.template_args =  dict(T1_files=[T1_file_names], 
-                                             T2_files=[T2_file_names]) #No template args to substitute
+  ALL_SRC_T1_T2.inputs.template_args = template_args
 
 
   ########################################################
@@ -188,11 +193,10 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, Inte
   BCD.inputs.interpolationMode = InterpolationMode
   BCD.inputs.houghEyeDetectorMode = 1
   BCD.inputs.acLowerBound = 80
-  BCD.inputs.llsModel = os.path.join(ScanDir,'LLSModel.hdf5')
-  BCD.inputs.inputTemplateModel = os.path.join(ScanDir,'T1.mdl')
+  BCD.inputs.llsModel = os.path.join(BCD_model_path,'LLSModel.hdf5')
+  BCD.inputs.inputTemplateModel = os.path.join(BCD_model_path,'T1.mdl')
   
   # Entries below are of the form:
-  # (node1, node2, [(out_source1, out_dest1), (out_source2, out_dest2), ...])
   baw200.connect([
                   (SRC_T1_T2,BCD, [('T1_0_file', 'inputVolume')]),
   ])
@@ -201,14 +205,20 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, Version=110, Inte
   ########################################################
   # Run BABC on Multi-modal images
   ########################################################
-  
-  MergeT1T2 = pe.Node(interface=Merge(2),name='MergeT1T2')
+  inputs_length = len(T1_file_names)+len(T2_file_names)
+  MergeT1T2 = pe.Node(interface=Merge(inputs_length),name='MergeT1T2')
   
   baw200.connect([
-    (BCD,MergeT1T2,[('outputVolume','in1')]),
-    (SRC_T1_T2,MergeT1T2,[('T2_0_file','in2')])
+    (BCD,MergeT1T2,[('outputVolume','in1')])
   ])
+  for i,fname in enumerate(T1_file_names[1:]):
+      baw200.connect([
+          (ALL_SRC_T1_T2,MergeT1T2,[("T1_%s"%(i+2),"in%s"%(i+2))])])
   
+  for i,fname in enumerate(T2_file_names):
+      baw200.connect([
+          (ALL_SRC_T1_T2,MergeT1T2,[("T2_%s"%(i+1),"in%s"%(i+len(T1_file_names)+1))])])
+
   BAtlas = MakeAtlasNode(atlas_fname_wpath) ## Call function to create node
   
   BABC= pe.Node(interface=BRAINSABC(), name="BABC")
@@ -311,8 +321,10 @@ def main(argv=None):
     group.add_argument('-t2s', action="store", dest='t2', required=True,
                        help='A comma seperated list of T2 images. At least one image required.')
     group.add_argument('-atlasPath', action="store", dest='atlas_fname_wpath', required=True,
-                       help='The path to the Atlas file used by BRAINSABC.',
+                       help='The path to the Atlas directory used by BRAINSABC.',
                        default='/raid0/homes/hjohnson/src/BRAINS3-Darwin-SuperBuildTest/src/bin/Atlas/Atlas_20110701')
+    group.add_argument('-BCDModelPath', action="store", dest='BCD_model_path', required=True,
+                       help='The path to the model used by BRAINSConstellationDetector.')
     parser.add_argument('--version', action='version', version='%(prog)s 1.0')
     #parser.add_argument('-v', action='store_false', dest='verbose', default=True,
     #                    help='If not present, prints the locations')
@@ -327,7 +339,8 @@ def main(argv=None):
         print "ERROR:  Length of T2 image list is 0,  at least one T2 image must be specified."
         sys.exit(-1)
 
-    WorkupT1T2(OUTDIR,input_arguments.t1.split(','),input_arguments.t2.split(','),input_arguments.atlas_fname_wpath)
+    WorkupT1T2(OUTDIR,input_arguments.t1.split(','),input_arguments.t2.split(','),input_arguments.atlas_fname_wpath,
+              input_arguments.BCD_model_path)
 
 if __name__ == "__main__":
     sys.exit(main())
