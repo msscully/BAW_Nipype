@@ -12,8 +12,6 @@ if __name__ == "__main__":
     group.add_argument('-s', action="store", dest='slicer_exec', required=True,
                        help='Path to slicer executable',
                       default='/hjohnson/NAMIC/msscully/BRAINSia/Slicer-itkv4/Slicer-build/Slicer')
-    group.add_argument('-t2s', action="store", dest='t2', required=True,
-                       help='A comma seperated list of T2 images. At least one image required.')
     parser.add_argument('--version', action='version', version='%(prog)s 1.0')
     input_arguments = parser.parse_args()
 
