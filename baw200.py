@@ -36,6 +36,7 @@ from BRAINSFit import *
 from BRAINSMush import *
 from BRAINSResample import *
 from BRAINSROIAuto import *
+from BRAINSLandmarkInitializer import *
 
 import os
 import sys
@@ -87,9 +88,25 @@ def MakeAtlasNode(atlasDirectory):
     """Gererate a DataGrabber node that creates outputs for all the
     elements of the atlas.
     """
-    #Generate by running a file system list "ls -1 $AtlasDir *.nii.gz *.xml"
+    #Generate by running a file system list "ls -1 $AtlasDir *.nii.gz *.xml *.fcsv *.wgts"
     atlas_file_list="AtlasPVDefinition.xml ALLPVAIR.nii.gz ALLPVBASALTISSUE.nii.gz ALLPVCRBLGM.nii.gz ALLPVCRBLWM.nii.gz ALLPVCSF.nii.gz ALLPVNOTCSF.nii.gz ALLPVNOTGM.nii.gz ALLPVNOTVB.nii.gz ALLPVNOTWM.nii.gz ALLPVSURFGM.nii.gz ALLPVVB.nii.gz ALLPVWM.nii.gz avg_t1.nii.gz avg_t2.nii.gz tempNOTVBBOX.nii.gz template_ABC_lables.nii.gz template_WMPM2_labels.nii.gz template_WMPM2_labels.txt template_brain.nii.gz template_cerebellum.nii.gz template_class.nii.gz template_headregion.nii.gz template_leftHemisphere.nii.gz template_nac_lables.nii.gz template_nac_lables.txt template_rightHemisphere.nii.gz template_t1.nii.gz template_t1_clipped.nii.gz template_t2.nii.gz template_t2_clipped.nii.gz template_ventricles.nii.gz"
     atlas_file_names=atlas_file_list.split(' ')
+    atlas_file_names=["AtlasPVDefinition.xml","ALLPVAIR.nii.gz",
+                      "ALLPVBASALTISSUE.nii.gz","ALLPVCRBLGM.nii.gz",
+                      "ALLPVCRBLWM.nii.gz","ALLPVCSF.nii.gz","ALLPVNOTCSF.nii.gz",
+                      "ALLPVNOTGM.nii.gz","ALLPVNOTVB.nii.gz","ALLPVNOTWM.nii.gz",
+                      "ALLPVSURFGM.nii.gz","ALLPVVB.nii.gz","ALLPVWM.nii.gz",
+                      "avg_t1.nii.gz","avg_t2.nii.gz","tempNOTVBBOX.nii.gz",
+                      "template_ABC_lables.nii.gz","template_WMPM2_labels.nii.gz",
+                      "template_WMPM2_labels.txt","template_brain.nii.gz",
+                      "template_cerebellum.nii.gz","template_class.nii.gz",
+                      "template_headregion.nii.gz","template_leftHemisphere.nii.gz",
+                      "template_nac_lables.nii.gz","template_nac_lables.txt",
+                      "template_rightHemisphere.nii.gz","template_t1.nii.gz",
+                      "template_t1_clipped.nii.gz","template_t2.nii.gz",
+                      "template_t2_clipped.nii.gz","template_ventricles.nii.gz",
+                      "template_Original_BCD_Landmark.fcsv","template_Original_BCD_Landmark.wgts"]
+
     ## Remove filename extensions for images, but replace . with _ for other file types
     atlas_file_keys=[fn.replace('.nii.gz','').replace('.','_') for fn in atlas_file_names]
     
@@ -208,6 +225,19 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   inputs_length = len(T1_file_names)+len(T2_file_names)
   MergeT1T2 = pe.Node(interface=Merge(inputs_length),name='MergeT1T2')
   
+  BLI = pe.Node(interface=BRAINSLandmarkInitializer(), name="BLI")
+  BLI.inputs.outputTransformFilename = "landmarkInitializer_atlas_to_subject_transform.mat"
+
+  BAtlas = MakeAtlasNode(atlas_fname_wpath) ## Call function to create node
+
+  baw200.connect([
+      (BCD,BLI,[('outputLandmarksInACPCAlignedSpace','inputFixedLandmarkFilename')]),
+  ])
+  baw200.connect([
+      (BAtlas,BLI,[('template_Original_BCD_Landmark_fcsv','inputMovingLandmarkFilename')]),
+      (BAtlas,BLI,[('template_Original_BCD_Landmark_wgts','inputWeightFilename')])
+  ])
+
   baw200.connect([
     (BCD,MergeT1T2,[('outputVolume','in1')])
   ])
@@ -218,8 +248,6 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   for i,fname in enumerate(T2_file_names):
       baw200.connect([
           (ALL_SRC_T1_T2,MergeT1T2,[("T2_%s"%(i+1),"in%s"%(i+len(T1_file_names)+1))])])
-
-  BAtlas = MakeAtlasNode(atlas_fname_wpath) ## Call function to create node
   
   BABC= pe.Node(interface=BRAINSABC(), name="BABC")
   BABC.inputs.debuglevel = 0
@@ -253,6 +281,7 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
     (MergeT1T2,BABC, [('out','inputVolumes')])
   ])
 
+  baw200.connect(BLI,'outputTransformFilename',BABC,'atlasToSubjectInitialTransform')
   """
   Get the first T1 and T2 corrected images from BABC
   """
