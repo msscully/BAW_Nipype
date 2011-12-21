@@ -9,9 +9,6 @@ if __name__ == "__main__":
     group.add_argument('-p', action="store", dest='exec_dir', required=True,
                        help='SEM programs path.',
                        default='/hjohnson/NAMIC/msscully/BRAINSia/Slicer-itkv4/Slicer-build/plugins')
-    group.add_argument('-s', action="store", dest='slicer_exec', required=True,
-                       help='Path to slicer executable',
-                      default='/hjohnson/NAMIC/msscully/BRAINSia/Slicer-itkv4/Slicer-build/Slicer')
     parser.add_argument('--version', action='version', version='%(prog)s 1.0')
     input_arguments = parser.parse_args()
 
@@ -22,6 +19,7 @@ BRAINSAlignMSP
 BRAINSClipInferior
 BRAINSConstellationDetector
 BRAINSConstellationModeler
+BRAINSLandmarkInitializer
 BRAINSDemonWarp
 BRAINSFit
 BRAINSMush
@@ -70,7 +68,6 @@ gtractTransformToDeformationField
     ##        AND calling the module with --xml must be supported and compliant.
     ##       modules_list = ['BRAINSConstellationDetector','BRAINSFit', 'BRAINSResample', 'BRAINSDemonWarp', 'BRAINSROIAuto']
     ## SlicerExecutionModel compliant tools that are usually statically built, and don't need the Slicer3 --launcher
-    slicerLauncer=[input_arguments.slicer_exec,'--launch']
     SEM.generate_all_classes(modules_list=SEM_exe,launcher=[])
 
 
