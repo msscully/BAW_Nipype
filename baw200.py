@@ -105,7 +105,7 @@ def MakeAtlasNode(atlasDirectory):
                       "template_rightHemisphere.nii.gz","template_t1.nii.gz",
                       "template_t1_clipped.nii.gz","template_t2.nii.gz",
                       "template_t2_clipped.nii.gz","template_ventricles.nii.gz",
-                      "template_Original_BCD_Landmark.fcsv","template_Original_BCD_Landmark.wgts"]
+                      "template_landmarks.fcsv","template_landmark_weights.csv"]
 
     ## Remove filename extensions for images, but replace . with _ for other file types
     atlas_file_keys=[fn.replace('.nii.gz','').replace('.','_') for fn in atlas_file_names]
