@@ -37,6 +37,7 @@ from BRAINSMush import *
 from BRAINSResample import *
 from BRAINSROIAuto import *
 from BRAINSLandmarkInitializer import *
+from BRAINSCut import *
 from GradientAnisotropicDiffusionImageFilter import *
 from GenerateSummedGradientImage import *
 
@@ -107,7 +108,7 @@ def MakeAtlasNode(atlasDirectory):
                       "template_rightHemisphere.nii.gz","template_t1.nii.gz",
                       "template_t1_clipped.nii.gz","template_t2.nii.gz",
                       "template_t2_clipped.nii.gz","template_ventricles.nii.gz",
-                      "template_landmarks.fcsv","template_landmark_weights.csv"]
+                      "template_landmarks.fcsv","template_landmark_weights.csv",]
 
     ## Remove filename extensions for images, but replace . with _ for other file types
     atlas_file_keys=[fn.replace('.nii.gz','').replace('.','_') for fn in atlas_file_names]
@@ -273,6 +274,7 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   BABC.inputs.outputDirtyLabels = "DirtyLabels.nii.gz"
   BABC.inputs.posteriorTemplate = "POSTERIOR_%s.nii.gz"
   BABC.inputs.atlasToSubjectTransform = "atlas_to_subject.mat"
+  BABC.inputs.implicitOutputs = ['t1_average.nii.gz', 't2_average.nii.gz']
   
   BABC.inputs.resamplerInterpolatorType = InterpolationMode
   ##
@@ -333,8 +335,8 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   """
   Split the implicit outputs of BABC
   """
-  SPLIT = pe.Node(interface = Split(), name="SPLIT")
-  
+  SPLIT = pe.Node(Function(input_names=['inlist'], output_names=['out1','out2'], 
+                           function = get_first_T1_and_T2), name="SPLIT")
   baw200.connect(BABC,'implicitOutputs',SPLIT,'inlist')
 
 
@@ -342,18 +344,18 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   Gradient Anistropic Diffusion images for BRAINSCut
   """
   GADT1=pe.Node(interface=GradientAnisotropicDiffusionImageFilter(),name="GADT1")
-  GADT1.inputs.timeStep = "0.05"
-  GADT1.inputs.conductance = "1"
-  GADT1.inputs.numberOfIterations = "5"
+  GADT1.inputs.timeStep = 0.05
+  GADT1.inputs.conductance = 1
+  GADT1.inputs.numberOfIterations = 5
 
-  baw200.connect(SPLIT,'out1','GADT1','inputVolume')
+  baw200.connect(SPLIT,'out1',GADT1,'inputVolume')
 
   GADT2=pe.Node(interface=GradientAnisotropicDiffusionImageFilter(),name="GADT2")
-  GADT2.inputs.timeStep = "0.05"
-  GADT2.inputs.conductance = "1"
-  GADT2.inputs.numberOfIterations = "5"
+  GADT2.inputs.timeStep = 0.05
+  GADT2.inputs.conductance = 1
+  GADT2.inputs.numberOfIterations = 5
 
-  baw200.connect(SPLIT,'out2','GADT2','inputVolume')
+  baw200.connect(SPLIT,'out2',GADT2,'inputVolume')
 
   """
   Sum the gradient images for BRAINSCut
@@ -364,11 +366,15 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   baw200.connect(GADT2,'outputVolume',SGI,'inputVolume2')
 
   """
-  BRAINSCut
+  Create xml file for BRAINSCut
   """
   BRAINSCut_xml_file = ''
+
+  """
+  BRAINSCut
+  """
   BRAINSCUT = pe.Node(interface=BRAINSCut(),name="BRAINSCUT")
-  BRAINSCUT.inputs.applyModel = "1"
+  BRAINSCUT.inputs.applyModel = True
   BRAINSCUT.inputs.netConfiguration = BRAINSCut_xml_file
 
   """
