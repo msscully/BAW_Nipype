@@ -15,6 +15,7 @@ if __name__ == "__main__":
     # removed BRAINSEyeDetector because it doesn't define channels
     test_list="""    
 BRAINSABC
+BRAINSCut
 BRAINSAlignMSP
 BRAINSClipInferior
 BRAINSConstellationDetector
