@@ -52,6 +52,8 @@ gtractResampleCodeImage
 gtractResampleDWIInPlace
 gtractTensor
 gtractTransformToDeformationField
+GradientAnisotropicDiffusionImageFilter
+GenerateSummedGradientImage
 """
     SEM_exe=list()
     for candidate_exe in test_list.split():
