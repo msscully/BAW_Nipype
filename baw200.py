@@ -366,6 +366,21 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   baw200.connect(GADT2,'outputVolume',SGI,'inputVolume2')
 
   """
+  Load the BRAINSCut models & probabiity maps.
+  """
+  """ Commented out as the atlas directory doesn't seem to be setup correctly yet.
+  BCM = pe.Node(interface=nio.DataGrabber(out_fields=""), name='BCM')
+  BCM.inputs.base_directory = atlas_fname_wpath
+  BCM.inputs.template = '%s/%s.%s'
+  BCM.inputs.template_args['phi'] = ['','','']
+  BCM.inputs.template_args['rho'] = ['','','']
+  BCM.inputs.template_args['theta'] = ['','','']
+  BCM.inputs.template_args['r_caudate'] = ['','','']
+  BCM.inputs.template_args['l_caudate'] = ['','','']
+  """
+
+
+  """
   Create xml file for BRAINSCut
   """
   BRAINSCut_xml_file = ''
