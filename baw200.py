@@ -37,6 +37,8 @@ from BRAINSMush import *
 from BRAINSResample import *
 from BRAINSROIAuto import *
 from BRAINSLandmarkInitializer import *
+from GradientAnisotropicDiffusionImageFilter import *
+from GenerateSummedGradientImage import *
 
 import os
 import sys
@@ -234,8 +236,8 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
       (BCD,BLI,[('outputLandmarksInACPCAlignedSpace','inputFixedLandmarkFilename')]),
   ])
   baw200.connect([
-      (BAtlas,BLI,[('template_Original_BCD_Landmark_fcsv','inputMovingLandmarkFilename')]),
-      (BAtlas,BLI,[('template_Original_BCD_Landmark_wgts','inputWeightFilename')])
+      (BAtlas,BLI,[('template_landmarks_fcsv','inputMovingLandmarkFilename')]),
+      (BAtlas,BLI,[('template_landmark_weights_csv','inputWeightFilename')])
   ])
 
   baw200.connect([
@@ -327,6 +329,47 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   BROI.inputs.thresholdCorrectionFactor=1.0
   BROI.inputs.outputROIMaskVolume = "temproiAuto_t1_ACPC_corrected_BRAINSABC.nii.gz"
   baw200.connect(bfc_files,'t1_corrected',BROI,'inputVolume')
+
+  """
+  Split the implicit outputs of BABC
+  """
+  SPLIT = pe.Node(interface = Split(), name="SPLIT")
+  
+  baw200.connect(BABC,'implicitOutputs',SPLIT,'inlist')
+
+
+  """
+  Gradient Anistropic Diffusion images for BRAINSCut
+  """
+  GADT1=pe.Node(interface=GradientAnisotropicDiffusionImageFilter(),name="GADT1")
+  GADT1.inputs.timeStep = "0.05"
+  GADT1.inputs.conductance = "1"
+  GADT1.inputs.numberOfIterations = "5"
+
+  baw200.connect(SPLIT,'out1','GADT1','inputVolume')
+
+  GADT2=pe.Node(interface=GradientAnisotropicDiffusionImageFilter(),name="GADT2")
+  GADT2.inputs.timeStep = "0.05"
+  GADT2.inputs.conductance = "1"
+  GADT2.inputs.numberOfIterations = "5"
+
+  baw200.connect(SPLIT,'out2','GADT2','inputVolume')
+
+  """
+  Sum the gradient images for BRAINSCut
+  """
+  SGI=pe.Node(interface=GenerateSummedGradientImage(),name="SGI")
+
+  baw200.connect(GADT1,'outputVolume',SGI,'inputVolume1')
+  baw200.connect(GADT2,'outputVolume',SGI,'inputVolume2')
+
+  """
+  BRAINSCut
+  """
+  BRAINSCut_xml_file = ''
+  BRAINSCUT = pe.Node(interface=BRAINSCut(),name="BRAINSCUT")
+  BRAINSCUT.inputs.applyModel = "1"
+  BRAINSCUT.inputs.netConfiguration = BRAINSCut_xml_file
 
   """
   BRAINSTalairach
