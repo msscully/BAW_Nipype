@@ -1,4 +1,4 @@
-from nipype.interfaces.slicer import generate_classes as SEM
+import generate_classes as SEM
 import subprocess
 import argparse
 

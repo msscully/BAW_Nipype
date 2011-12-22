@@ -234,8 +234,8 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
       (BCD,BLI,[('outputLandmarksInACPCAlignedSpace','inputFixedLandmarkFilename')]),
   ])
   baw200.connect([
-      (BAtlas,BLI,[('template_Original_BCD_Landmark_fcsv','inputMovingLandmarkFilename')]),
-      (BAtlas,BLI,[('template_Original_BCD_Landmark_wgts','inputWeightFilename')])
+      (BAtlas,BLI,[('template_landmarks_fcsv','inputMovingLandmarkFilename')]),
+      (BAtlas,BLI,[('template_landmark_weights_csv','inputWeightFilename')])
   ])
 
   baw200.connect([
