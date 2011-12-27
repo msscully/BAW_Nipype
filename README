@@ -7,7 +7,10 @@ Then install the nipype version in the BRAINSia github account.
 Add the SEM plugin directory (something like /Slicer-superbuild/Slicer-build/plugins) to your path.
 
 Run generate_brains_classes.py giving it the SEM plugin directory and the path/file to the slicer executable.
-"python generate_brains_classes.py -p /scratch/PREDICT/johnsonhj/src/BRAINSStandAlone-Linux64-gcc44/lib"
+
+source /scratch/PREDICT/B4Auto_20111220_RUNS/bin/activate
+export PATH=/scratch/PREDICT/johnsonhj/src/BRAINSStandAlone-Linux64-gcc44/lib:$PATH
+python generate_brains_classes.py -p /scratch/PREDICT/johnsonhj/src/BRAINSStandAlone-Linux64-gcc44/lib
 
 Add whatever directory you ran generate_brains_classes.py from to your python path.
 

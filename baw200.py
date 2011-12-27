@@ -204,7 +204,8 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   ########################################################
   BCD = pe.Node(interface=BRAINSConstellationDetector(), name="BCD")
   ##  Use program default BCD.inputs.inputTemplateModel = T1ACPCModelFile
-  BCD.inputs.outputVolume =   T1Basename + "_ACPC_InPlace.nii.gz"                #$# T1AcpcImageList
+  ##BCD.inputs.outputVolume =   T1Basename + "_ACPC_InPlace.nii.gz"                #$# T1AcpcImageList
+  BCD.inputs.outputResampledVolume = T1Basename + "_ACPC.nii.gz"
   BCD.inputs.outputTransform =  T1Basename + "_ACPC_transform.mat"
   BCD.inputs.outputLandmarksInInputSpace = T1Basename + "_ACPC_Original.fcsv"
   BCD.inputs.outputLandmarksInACPCAlignedSpace = T1Basename + "_ACPC_Landmarks.fcsv"
@@ -221,6 +222,20 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
                   (SRC_T1_T2,BCD, [('T1_0_file', 'inputVolume')]),
   ])
 
+  ########################################################
+  # Run BROIA to make T1 image as small as possible
+  ########################################################
+  BROIA = pe.Node(interface=BRAINSROIAuto(), name="BROIA")
+  BROIA.inputs.ROIAutoDilateSize = 10
+  BROIA.inputs.outputVolumePixelType = "short"
+  BROIA.inputs.maskOutput = True
+  BROIA.inputs.cropOutput = True
+  BROIA.inputs.outputVolume = T1Basename + "_ACPC_InPlace_cropped.nii.gz"
+  BROIA.inputs.outputROIMaskVolume = T1Basename + "_ACPC_InPlace_foreground_seg.nii.gz"
+  
+  baw200.connect([
+    (BCD,BROIA,[('outputResampledVolume','inputVolume')])
+  ])
 
   ########################################################
   # Run BABC on Multi-modal images
@@ -242,7 +257,7 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   ])
 
   baw200.connect([
-    (BCD,MergeT1T2,[('outputVolume','in1')])
+    (BROIA,MergeT1T2,[('outputVolume','in1')])
   ])
   for i,fname in enumerate(T1_file_names[1:]):
       baw200.connect([
@@ -270,15 +285,15 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
                       (GetExtensionlessBaseName(i),".nii.gz"))
   BABC.inputs.outputVolumes = out_vols
   BABC.inputs.inputVolumeTypes = input_types
-  BABC.inputs.outputLabels = "labels.nii.gz"
-  BABC.inputs.outputDirtyLabels = "DirtyLabels.nii.gz"
+  BABC.inputs.outputLabels = "brain_label_seg.nii.gz"
+  BABC.inputs.outputDirtyLabels = "volume_label_seg.nii.gz"
   BABC.inputs.posteriorTemplate = "POSTERIOR_%s.nii.gz"
   BABC.inputs.atlasToSubjectTransform = "atlas_to_subject.mat"
-  BABC.inputs.implicitOutputs = ['t1_average.nii.gz', 't2_average.nii.gz']
+  BABC.inputs.implicitOutputs = ['t1_average_BRAINSABC.nii.gz', 't2_average_BRAINSABC.nii.gz']
   
   BABC.inputs.resamplerInterpolatorType = InterpolationMode
   ##
-  BABC.inputs.outputDir = 'BABC'
+  BABC.inputs.outputDir = './'
   
   baw200.connect(BAtlas,'AtlasPVDefinition_xml',BABC,'atlasDefinition')
   baw200.connect([
@@ -291,8 +306,7 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   """
   bfc_files = pe.Node(Function(input_names=['in_files','T1_count'],    
                              output_names=['t1_corrected','t2_corrected'], 
-                             function=get_first_T1_and_T2), 
-                    name='bfc_files')
+                             function=get_first_T1_and_T2), name='bfc_files')
   
   bfc_files.inputs.T1_count = len(T1_file_names)
 
@@ -335,9 +349,11 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   """
   Split the implicit outputs of BABC
   """
-  SPLIT = pe.Node(Function(input_names=['inlist'], output_names=['out1','out2'], 
-                           function = get_first_T1_and_T2), name="SPLIT")
-  baw200.connect(BABC,'implicitOutputs',SPLIT,'inlist')
+  SplitAvgBABC = pe.Node(Function(input_names=['in_files','T1_count'], output_names=['avgBABCT1','avgBABCT2'], 
+                           function = get_first_T1_and_T2), name="SplitAvgBABC")
+  SplitAvgBABC.inputs.T1_count = 1 ## There is only 1 average T1 image.
+
+  baw200.connect(BABC,'implicitOutputs',SplitAvgBABC,'in_files')
 
 
   """
@@ -347,20 +363,23 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   GADT1.inputs.timeStep = 0.05
   GADT1.inputs.conductance = 1
   GADT1.inputs.numberOfIterations = 5
+  GADT1.inputs.outputVolume = "GADT1.nii.gz"
 
-  baw200.connect(SPLIT,'out1',GADT1,'inputVolume')
+  baw200.connect(SplitAvgBABC,'avgBABCT1',GADT1,'inputVolume')
 
   GADT2=pe.Node(interface=GradientAnisotropicDiffusionImageFilter(),name="GADT2")
   GADT2.inputs.timeStep = 0.05
   GADT2.inputs.conductance = 1
   GADT2.inputs.numberOfIterations = 5
+  GADT2.inputs.outputVolume = "GADT2.nii.gz"
 
-  baw200.connect(SPLIT,'out2',GADT2,'inputVolume')
+  baw200.connect(SplitAvgBABC,'avgBABCT2',GADT2,'inputVolume')
 
   """
   Sum the gradient images for BRAINSCut
   """
   SGI=pe.Node(interface=GenerateSummedGradientImage(),name="SGI")
+  SGI.inputs.outputFileName = "SummedGradImage.nii.gz"
 
   baw200.connect(GADT1,'outputVolume',SGI,'inputVolume1')
   baw200.connect(GADT2,'outputVolume',SGI,'inputVolume2')
@@ -388,9 +407,11 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   """
   BRAINSCut
   """
+  """ COMMENT OUT FOR THE MOMENT
   BRAINSCUT = pe.Node(interface=BRAINSCut(),name="BRAINSCUT")
   BRAINSCUT.inputs.applyModel = True
   BRAINSCUT.inputs.netConfiguration = BRAINSCut_xml_file
+  """
 
   """
   BRAINSTalairach
@@ -398,7 +419,7 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   """
   
   baw200.run()
-  baw200.write_graph()
+  #baw200.write_graph()
   
 def main(argv=None):
     if argv == None:
