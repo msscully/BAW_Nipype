@@ -23,6 +23,8 @@ from nipype.interfaces.utility import Merge, Split, Function, Rename
 import nipype.interfaces.io as nio           # Data i/o
 import nipype.pipeline.engine as pe          # pypeline engine
 
+from nipype.interfaces.freesurfer import ReconAll
+
 from nipype.utils.misc import package_check
 package_check('numpy', '1.3', 'tutorial1')
 package_check('scipy', '0.7', 'tutorial1')
@@ -417,6 +419,18 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   BRAINSTalairach
   Not implemented yet.
   """
+
+  subj_id = os.path.basename(os.path.dirname(os.path.dirname(baw200.base_dir)))
+  scan_id = os.path.basename(os.path.dirname(baw200.base_dir))
+  """
+  Run Freesurfer ReconAll
+  """
+  reconall = pe.Node(interface=ReconAll(),name="FS510")
+  reconall.inputs.subject_id = subj_id+'_'+scan_id
+  reconall.inputs.directive = 'all'
+  reconall.inputs.subjects_dir = '.'
+  baw200.connect(SplitAvgBABC,'avgBABCT1',reconall,'T1_files')
+#  reconall.cmdline
   
   baw200.run()
   #baw200.write_graph()
