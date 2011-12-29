@@ -127,6 +127,9 @@ def MakeAtlasNode(atlasDirectory):
     BAtlas.inputs.template_args = dict(zip(atlas_file_keys,atlas_template_args_match))
     return BAtlas
  
+def create_BRAINSCut_XML(rho,phi,theta,model,r_probabilityMap,l_probabilityMap):
+    pass
+
 def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
                run_freesurfer, Version=110, InterpolationMode="Linear", Mode=10,DwiList=[]):
   """ 
@@ -386,25 +389,42 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   baw200.connect(GADT1,'outputVolume',SGI,'inputVolume1')
   baw200.connect(GADT2,'outputVolume',SGI,'inputVolume2')
 
+
   """
   Load the BRAINSCut models & probabiity maps.
   """
-  """ Commented out as the atlas directory doesn't seem to be setup correctly yet.
-  BCM = pe.Node(interface=nio.DataGrabber(out_fields=""), name='BCM')
-  BCM.inputs.base_directory = atlas_fname_wpath
-  BCM.inputs.template = '%s/%s.%s'
-  BCM.inputs.template_args['phi'] = ['','','']
-  BCM.inputs.template_args['rho'] = ['','','']
-  BCM.inputs.template_args['theta'] = ['','','']
-  BCM.inputs.template_args['r_caudate'] = ['','','']
-  BCM.inputs.template_args['l_caudate'] = ['','','']
-  """
+  BRAINSCut_structures = ['caudate','thalamus','putamen','hippocampus']
+  BCM_outputs = ['phi','rho','theta']
+  for structure in BRAINSCut_structures:
+      BCM_outputs.append('r_%s'%structure)
+      BCM_outputs.append('l_%s'%structure)
+      BCM_outputs.append('%sModel'%structure)
 
+  BCM_models = pe.Node(interface=nio.DataGrabber(out_fields=BCM_outputs), name='BCM_models')
+  BCM_models.inputs.base_directory = atlas_fname_wpath
+  BCM_models.inputs.template = '%s/%s.%s'
+  BCM_models.inputs.template_args['phi'] = [['spatialImages','phi','nii.gz']]
+  BCM_models.inputs.template_args['rho'] = [['spatialImages','rho','nii.gz']]
+  BCM_models.inputs.template_args['theta'] = [['spatialImages','theta','nii.gz']]
+  for structure in BRAINSCut_structures:
+      BCM_models.inputs.template_args['r_%s'%structure] = [['probabilityMaps','r_%s_ProbabilityMap'%structure,'nii.gs']]
+      BCM_models.inputs.template_args['l_%s'%structure] = [['probabilityMaps','r_%s_ProbabilityMap'%structure,'nii.gs']]
+      BCM_models.inputs.template_args['%sModel'] = [['modelFiles','%sModel*'%structure,'txt*']]
+
+  """
+  The xml creation and BRAINSCut need to be their own mini-pipeline that gets
+  executed once for each of the structures in BRAINSCut_structures.  This can be
+  accomplished with a map node and a new pipeline.
+  """
 
   """
   Create xml file for BRAINSCut
   """
-  BRAINSCut_xml_file = ''
+  CreateBRAINSCutXML = pe.Node(Function(input_names=['rho','phi','theta','model',
+                                                    'r_probabilityMap','l_probabilityMap'], 
+                                       output_names=['xml_filename'], 
+                                       function = create_BRAINSCut_XML),
+                              name="CreateBRAINSCutXML")
 
   """
   BRAINSCut
