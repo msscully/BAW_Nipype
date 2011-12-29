@@ -128,7 +128,7 @@ def MakeAtlasNode(atlasDirectory):
     return BAtlas
  
 def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
-               Version=110, InterpolationMode="Linear", Mode=10,DwiList=[]):
+               run_freesurfer, Version=110, InterpolationMode="Linear", Mode=10,DwiList=[]):
   """ 
   Run autoworkup on a single subjects data.
 
@@ -425,11 +425,15 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   """
   Run Freesurfer ReconAll
   """
-  reconall = pe.Node(interface=ReconAll(),name="FS510")
-  reconall.inputs.subject_id = subj_id+'_'+scan_id
-  reconall.inputs.directive = 'all'
-  reconall.inputs.subjects_dir = '.'
-  baw200.connect(SplitAvgBABC,'avgBABCT1',reconall,'T1_files')
+  if run_freesurfer:
+      reconall = pe.Node(interface=ReconAll(),name="FS510")
+      reconall.inputs.subject_id = subj_id+'_'+scan_id
+      reconall.inputs.directive = 'all'
+      reconall.inputs.subjects_dir = '.'
+      baw200.connect(SplitAvgBABC,'avgBABCT1',reconall,'T1_files')
+  else:
+      print "Skipping freesurfer"
+
 #  reconall.cmdline
   
   baw200.run()
@@ -453,6 +457,8 @@ def main(argv=None):
                        default='/raid0/homes/hjohnson/src/BRAINS3-Darwin-SuperBuildTest/src/bin/Atlas/Atlas_20110701')
     group.add_argument('-BCDModelPath', action="store", dest='BCD_model_path', required=True,
                        help='The path to the model used by BRAINSConstellationDetector.')
+    group.add_argument('-runFreesurfer', action="store_true", dest='run_freesurfer', default=False,
+                       help='Should the freesurfer pipeline be run?.')
     parser.add_argument('--version', action='version', version='%(prog)s 1.0')
     #parser.add_argument('-v', action='store_false', dest='verbose', default=True,
     #                    help='If not present, prints the locations')
@@ -468,7 +474,7 @@ def main(argv=None):
         sys.exit(-1)
 
     WorkupT1T2(OUTDIR,input_arguments.t1.split(','),input_arguments.t2.split(','),input_arguments.atlas_fname_wpath,
-              input_arguments.BCD_model_path)
+              input_arguments.BCD_model_path,input_arguments.run_freesurfer)
 
 if __name__ == "__main__":
     sys.exit(main())
