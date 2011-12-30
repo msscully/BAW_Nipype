@@ -127,8 +127,61 @@ def MakeAtlasNode(atlasDirectory):
     BAtlas.inputs.template_args = dict(zip(atlas_file_keys,atlas_template_args_match))
     return BAtlas
  
-def create_BRAINSCut_XML(rho,phi,theta,model,r_probabilityMap,l_probabilityMap):
-    pass
+def create_BRAINSCut_XML(rho,phi,theta,model,r_probabilityMap,
+                         l_probabilityMap,atlasT1,
+                         atlasBrain,subjT1,subjT2,subjT1GAD,
+                         subjT2GAD,subjSGGAD,subjBrain,
+                         atlasToSubj,output_dir):
+
+    import re
+    import os
+    structure = re.search("r_(\w+)_ProbabilityMap",os.path.basename(r_probabilityMap)).group(1)
+    from lxml import etree
+    from lxml.builder import E
+    xml_output = E("AutoSegProcessDescription",
+                   E("DataSet",
+                     E("Image",Type="T1",Filename=atlasT1),
+                     E("Image",Type="T2",Filename="na"),
+                     E("Image",Type="SGGAD",Filename="na"),
+                     E("Mask",Type="RegistrationROI",Filename=atlasBrain),
+                     E("SpatialLocation",Type="rho",Filename=rho),
+                     E("SpatialLocation",Type="phi",Filename=phi),
+                     E("SpatialLocation",Type="theta",Filename=theta),
+                   Name="template",Type="Atlas"),
+                   E("RegistrationConfiguration",ImageTypeToUse="T1",
+                     ID="BSpline_ROI",BRAINSROIAutoDilateSize="1"),
+                   E("ANNParams",Iterations="100",MaximumVectorsPerEpoch="700000",
+                     EpochIterations="100",ErrorInterval="1",DesiredError="0.000001",
+                     NumberOfHiddenNodes="30",ActivationSlope="1.0",
+                     ActivationMinMax="1.0"),
+                   E("NeuralNetParams",MaskSmoothingValue="0.0",
+                     GradientProfileSize="1",TrainingModelFilename=model,
+                     TrainingVectorFilename="na",TestVectorFilename="na",
+                     Normalization="true"),
+                   E("ApplyModel",CutOutThresh="0.05",MaskThresh="0.4"),
+                   E("ProbabilityMap",StructureID="l_%s"%structure,Gaussian="0.5",
+                     GenerateVector="true",Filename=l_probabilityMap),
+                   E("ProbabilityMap",StructureID="r_%s"%structure,Gaussian="0.5",
+                     GenerateVector="true",Filename=r_probabilityMap),
+                   E("Dataset",
+                     E("Image",Type="T1",Filename=subjT1),
+                     E("Image",Type="T2",Filename=subjT2),
+                     E("Image",Type="SGGAD",Filename=subjSGGAD),
+                     E("Image",Type="T1GAD",Filename=subjT1GAD),
+                     E("Image",Type="T2GAD",Filename=subjT2GAD),
+                     E("Image",Type="RegistrationROI",Filename=subjBrain),
+                     E("Registration",SubjToAtlasRegistrationFilename="na",
+                       AtlasToSubjectRegistrationFilename=atlasToSubj,ID="BSpline_ROI"),
+                     Name=structure,Type="Apply",OutputDir=output_dir)
+                  )
+
+    if not os.path.exists(output_dir):
+        os.mkdir(output_dir)
+    xml_filename = os.path.join(output_dir,'%s.xml' % structure)
+    xml_file = open(xml_filename,'w')
+    xml_file.write(etree.tostring(xml_output, pretty_print=True))
+    return xml_filename
+
 
 def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
                run_freesurfer, Version=110, InterpolationMode="Linear", Mode=10,DwiList=[]):
@@ -394,22 +447,26 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   Load the BRAINSCut models & probabiity maps.
   """
   BRAINSCut_structures = ['caudate','thalamus','putamen','hippocampus']
-  BCM_outputs = ['phi','rho','theta']
-  for structure in BRAINSCut_structures:
-      BCM_outputs.append('r_%s'%structure)
-      BCM_outputs.append('l_%s'%structure)
-      BCM_outputs.append('%sModel'%structure)
+  BCM_outputs = ['phi','rho','theta','r_probabilityMaps',
+                 'l_probabilityMaps','models']
 
-  BCM_models = pe.Node(interface=nio.DataGrabber(out_fields=BCM_outputs), name='BCM_models')
-  BCM_models.inputs.base_directory = atlas_fname_wpath
-  BCM_models.inputs.template = '%s/%s.%s'
-  BCM_models.inputs.template_args['phi'] = [['spatialImages','phi','nii.gz']]
-  BCM_models.inputs.template_args['rho'] = [['spatialImages','rho','nii.gz']]
-  BCM_models.inputs.template_args['theta'] = [['spatialImages','theta','nii.gz']]
-  for structure in BRAINSCut_structures:
-      BCM_models.inputs.template_args['r_%s'%structure] = [['probabilityMaps','r_%s_ProbabilityMap'%structure,'nii.gs']]
-      BCM_models.inputs.template_args['l_%s'%structure] = [['probabilityMaps','r_%s_ProbabilityMap'%structure,'nii.gs']]
-      BCM_models.inputs.template_args['%sModel'] = [['modelFiles','%sModel*'%structure,'txt*']]
+  BCM_Models = pe.Node(interface=nio.DataGrabber(infields=['structures'],
+                                                 outfields=BCM_outputs),
+                       name='BCM_Models')
+  BCM_Models.inputs.base_directory = atlas_fname_wpath
+  BCM_Models.inputs.template = '%s/%s.%s'
+  BCM_Models.inputs.structures = BRAINSCut_structures
+  BCM_Models.inputs.template_args['phi'] = [['spatialImages','phi','nii.gz']]
+  BCM_Models.inputs.template_args['rho'] = [['spatialImages','rho','nii.gz']]
+  BCM_Models.inputs.template_args['theta'] = [['spatialImages','theta','nii.gz']]
+  BCM_Models.inputs.field_template = dict(
+      r_probabilityMaps='probabilityMaps/r_%s_ProbabilityMap.nii.gz',
+      l_probabilityMaps='probabilityMaps/l_%s_ProbabilityMap.nii.gz',
+      models='modelFiles/%sModel*',
+      )
+  BCM_Models.inputs.template_args['r_probabilityMaps'] = [['structures']]
+  BCM_Models.inputs.template_args['l_probabilityMaps'] = [['structures']]
+  BCM_Models.inputs.template_args['models'] = [['structures']]
 
   """
   The xml creation and BRAINSCut need to be their own mini-pipeline that gets
@@ -420,20 +477,48 @@ def WorkupT1T2(ScanDir, T1Images, T2Images, atlas_fname_wpath, BCD_model_path,
   """
   Create xml file for BRAINSCut
   """
-  CreateBRAINSCutXML = pe.Node(Function(input_names=['rho','phi','theta','model',
-                                                    'r_probabilityMap','l_probabilityMap'], 
-                                       output_names=['xml_filename'], 
-                                       function = create_BRAINSCut_XML),
-                              name="CreateBRAINSCutXML")
+
+  CreateBRAINSCutXML = pe.MapNode(Function(input_names=['rho','phi','theta',
+                                                        'model',
+                                                        'r_probabilityMap',
+                                                        'l_probabilityMap',
+                                                        'atlasT1','atlasBrain',
+                                                        'subjT1','subjT2',
+                                                        'subjT1GAD','subjT2GAD',
+                                                        'subjSGGAD','subjBrain',
+                                                        'atlasToSubj','output_dir'],
+                                           output_names=['xml_filename'], 
+                                           function = create_BRAINSCut_XML),
+                                  iterfield=['r_probabilityMap',
+                                             'l_probabilityMap','model'],
+                                  overwrite = True,
+                                  name="CreateBRAINSCutXML")
+
+  CreateBRAINSCutXML.inputs.output_dir = os.path.join(baw200.base_dir,
+                                                      "BRAINSCut_output")
+  baw200.connect(BCM_Models,'rho',CreateBRAINSCutXML,'rho')
+  baw200.connect(BCM_Models,'phi',CreateBRAINSCutXML,'phi')
+  baw200.connect(BCM_Models,'theta',CreateBRAINSCutXML,'theta')
+  baw200.connect(BCM_Models,'models',CreateBRAINSCutXML,'model')
+  baw200.connect(BCM_Models,'r_probabilityMaps',CreateBRAINSCutXML,'r_probabilityMap')
+  baw200.connect(BCM_Models,'l_probabilityMaps',CreateBRAINSCutXML,'l_probabilityMap')
+  baw200.connect(BAtlas,'template_t1',CreateBRAINSCutXML,'atlasT1')
+  baw200.connect(BAtlas,'template_brain',CreateBRAINSCutXML,'atlasBrain')
+  baw200.connect(SplitAvgBABC,'avgBABCT1',CreateBRAINSCutXML,'subjT1')
+  baw200.connect(SplitAvgBABC,'avgBABCT2',CreateBRAINSCutXML,'subjT2')
+  baw200.connect(GADT1,'outputVolume',CreateBRAINSCutXML,'subjT1GAD')
+  baw200.connect(GADT2,'outputVolume',CreateBRAINSCutXML,'subjT2GAD')
+  baw200.connect(SGI,'outputFileName',CreateBRAINSCutXML,'subjSGGAD')
+  baw200.connect(BABC,'outputLabels',CreateBRAINSCutXML,'subjBrain')
+  baw200.connect(BABC,'atlasToSubjectTransform',CreateBRAINSCutXML,'atlasToSubj')
 
   """
   BRAINSCut
   """
-  """ COMMENT OUT FOR THE MOMENT
-  BRAINSCUT = pe.Node(interface=BRAINSCut(),name="BRAINSCUT")
+  BRAINSCUT = pe.MapNode(interface=BRAINSCut(),name="BRAINSCUT",
+                         iterfield=['netConfiguration'])
   BRAINSCUT.inputs.applyModel = True
-  BRAINSCUT.inputs.netConfiguration = BRAINSCut_xml_file
-  """
+  baw200.connect(CreateBRAINSCutXML,'xml_filename',BRAINSCUT,'netConfiguration')
 
   """
   BRAINSTalairach
